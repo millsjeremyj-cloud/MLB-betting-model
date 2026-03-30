@@ -240,7 +240,9 @@ for (const [name, stats] of Object.entries(SP_DB_RAW)) {
 
 function getSPFactor2025(name = "") {
   const sp = SP_DB_2025[normName(name)];
-  return sp ? sp.factor : 1.0;
+  // 0.95 default: any MLB starter is by definition above-average, not league-average (1.0)
+  // This prevents inflated projected totals for pitchers not in the database
+  return sp ? sp.factor : 0.95;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -768,7 +770,7 @@ function AutoBetsTab({ bets, onUpdate, onDelete }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  GAME CARD
 // ═══════════════════════════════════════════════════════════════════════════════
-function GameCard({ game, standings, oddsEntry, blendedData }) {
+function GameCard({ game, standings, oddsEntry, blendedData, lineupData = {} }) {
   const [modelOpen, setModelOpen] = useState(false);
   const model = runModel(game.away, game.home, game.awayPitcher, game.homePitcher, game.venue, blendedData);
   const hasOdds = !!oddsEntry;
@@ -877,30 +879,87 @@ function GameCard({ game, standings, oddsEntry, blendedData }) {
       </div>
       {modelOpen && (
         <div style={{ padding: "12px 17px", background: `${C.bg}dd` }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {/* xR Calculation Breakdown */}
+          <div style={{ background: C.bg3, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+            <div style={{ fontSize: 7.5, color: C.accent, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>xR AWAY (runs by {aA})</div>
+            <div style={{ fontSize: 8, color: C.textDim, lineHeight: 2, fontFamily: "'DM Mono',monospace" }}>
+              <span style={{ color: C.textLo }}>4.60</span> × <span style={{ color: C.accent }}>{model.aOffIdx.toFixed(3)}</span><span style={{ color: C.textLo2 }}> off</span> × <span style={{ color: "#7ec8e3" }}>{model.aLineup.toFixed(3)}</span><span style={{ color: C.textLo2 }}> lineup</span> × (<span style={{ color: C.textLo2 }}>0.65×</span><span style={{ color: C.accentB }}>{model.hSpF.toFixed(3)}</span><span style={{ color: C.textLo2 }}> {game.homePitcher || "homeSP"}</span> + <span style={{ color: C.textLo2 }}>0.35×</span><span style={{ color: C.accentG }}>{model.hBP.toFixed(3)}</span><span style={{ color: C.textLo2 }}> homeBP</span>×<span style={{ color: "#c49bff" }}>{model.hBPFat.toFixed(2)}</span><span style={{ color: C.textLo2 }}> fat</span>) × <span style={{ color: "#a78bfa" }}>{model.pf.toFixed(2)}</span><span style={{ color: C.textLo2 }}> park</span> × <span style={{ color: C.textLo }}>0.98</span><span style={{ color: C.textLo2 }}> road</span>
+            </div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: C.accent, marginTop: 6 }}>= {model.xRA.toFixed(3)} runs</div>
+          </div>
+
+          <div style={{ background: C.bg3, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+            <div style={{ fontSize: 7.5, color: C.accent, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>xR HOME (runs by {hA})</div>
+            <div style={{ fontSize: 8, color: C.textDim, lineHeight: 2, fontFamily: "'DM Mono',monospace" }}>
+              <span style={{ color: C.textLo }}>4.60</span> × <span style={{ color: C.accent }}>{model.hOffIdx.toFixed(3)}</span><span style={{ color: C.textLo2 }}> off</span> × <span style={{ color: "#7ec8e3" }}>{model.hLineup.toFixed(3)}</span><span style={{ color: C.textLo2 }}> lineup</span> × (<span style={{ color: C.textLo2 }}>0.65×</span><span style={{ color: C.accentB }}>{model.aSpF.toFixed(3)}</span><span style={{ color: C.textLo2 }}> {game.awayPitcher || "awaySP"}</span> + <span style={{ color: C.textLo2 }}>0.35×</span><span style={{ color: C.accentG }}>{model.aBP.toFixed(3)}</span><span style={{ color: C.textLo2 }}> awayBP</span>×<span style={{ color: "#c49bff" }}>{model.aBPFat.toFixed(2)}</span><span style={{ color: C.textLo2 }}> fat</span>) × <span style={{ color: "#a78bfa" }}>{model.pf.toFixed(2)}</span><span style={{ color: C.textLo2 }}> park</span> × <span style={{ color: C.textLo }}>1.02</span><span style={{ color: C.textLo2 }}> home</span>
+            </div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 24, color: C.accent, marginTop: 6 }}>= {model.xRH.toFixed(3)} runs</div>
+          </div>
+
+          {/* Factor grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {[
-              { label: `${aA} Offense`, val: model.aOffIdx.toFixed(3), note: model.aOffBlend?.label ?? "2025 only" },
-              { label: `${hA} Offense`, val: model.hOffIdx.toFixed(3), note: model.hOffBlend?.label ?? "2025 only" },
-              { label: game.awayPitcher || "Away SP", val: model.aSpF.toFixed(3), note: `${model.aSpBlend?.label ?? "2025 only"} (↑=worse)` },
-              { label: game.homePitcher || "Home SP", val: model.hSpF.toFixed(3), note: `${model.hSpBlend?.label ?? "2025 only"} (↑=worse)` },
-              { label: "Away BP (Covers)", val: model.aBP.toFixed(3), note: `Fatigue: ${model.aBPFat.toFixed(2)}` },
-              { label: "Home BP (Covers)", val: model.hBP.toFixed(3), note: `Fatigue: ${model.hBPFat.toFixed(2)}` },
-              { label: "Away Lineup", val: model.aLineup.toFixed(3), note: "Avg 9 starters" },
-              { label: "Home Lineup", val: model.hLineup.toFixed(3), note: "Avg 9 starters" },
+              { label: `${aA} Offense`, val: model.aOffIdx.toFixed(3), note: model.aOffBlend?.label ?? "2025 only", good: model.aOffIdx > 1.02 },
+              { label: `${hA} Offense`, val: model.hOffIdx.toFixed(3), note: model.hOffBlend?.label ?? "2025 only", good: model.hOffIdx > 1.02 },
+              { label: game.awayPitcher || "Away SP", val: model.aSpF.toFixed(3), note: `${model.aSpBlend?.label ?? (SP_DB_2025[normName(game.awayPitcher)] ? "2025 DB" : "default 0.95")} · ↑=worse`, good: model.aSpF < 0.85 },
+              { label: game.homePitcher || "Home SP", val: model.hSpF.toFixed(3), note: `${model.hSpBlend?.label ?? (SP_DB_2025[normName(game.homePitcher)] ? "2025 DB" : "default 0.95")} · ↑=worse`, good: model.hSpF < 0.85 },
+              { label: `${aA} Bullpen`, val: model.aBP.toFixed(3), note: `Fat: ${model.aBPFat.toFixed(2)} · ${blendedData.liveBP?.[game.awayKey] ? "Covers live" : "2025 baseline"}`, good: model.aBP < 0.92 },
+              { label: `${hA} Bullpen`, val: model.hBP.toFixed(3), note: `Fat: ${model.hBPFat.toFixed(2)} · ${blendedData.liveBP?.[game.homeKey] ? "Covers live" : "2025 baseline"}`, good: model.hBP < 0.92 },
+              { label: `${aA} Lineup`, val: model.aLineup.toFixed(3), note: lineupData[game.awayKey]?.confirmed ? `${lineupData[game.awayKey]?.ratedCount || 0}/9 rated` : "Not confirmed", good: model.aLineup > 1.02 },
+              { label: `${hA} Lineup`, val: model.hLineup.toFixed(3), note: lineupData[game.homeKey]?.confirmed ? `${lineupData[game.homeKey]?.ratedCount || 0}/9 rated` : "Not confirmed", good: model.hLineup > 1.02 },
               { label: "Park Factor", val: model.pf.toFixed(2), note: game.venue || "—" },
-              { label: "Proj Total", val: model.projTotal.toString(), note: `xR ${model.xRA.toFixed(2)} + ${model.xRH.toFixed(2)}` },
+              { label: "Proj Total", val: model.projTotal.toString(), note: `${model.xRA.toFixed(2)} + ${model.xRH.toFixed(2)}` },
             ].map(r => (
-              <div key={r.label} style={{ background: C.bg3, borderRadius: 7, padding: "8px 10px" }}>
+              <div key={r.label} style={{ background: C.bg2, borderRadius: 7, padding: "8px 10px" }}>
                 <div style={{ fontSize: 7, color: C.textLo, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</div>
-                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: C.text, lineHeight: 1 }}>{r.val}</div>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: r.good ? C.accentG : C.text, lineHeight: 1 }}>{r.val}</div>
                 <div style={{ fontSize: 7, color: C.textLo2, marginTop: 2 }}>{r.note}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 8, fontSize: 7.5, color: C.textLo2, lineHeight: 1.7, borderTop: `1px solid ${C.bg3}`, paddingTop: 8 }}>
-            xR_Away = 4.6 × AwayOff × AwayLineup × (0.65×HomeSP + 0.35×HomeBP×HomeFat) × Park × 0.98<br />
-            xR_Home = 4.6 × HomeOff × HomeLineup × (0.65×AwaySP + 0.35×AwayBP×AwayFat) × Park × 1.02<br />
-            Win% = xR^1.83 Pythagorean · Higher pitcher factor = worse (more runs allowed)
+
+          {/* Starting Lineups */}
+          {(lineupData[game.awayKey]?.players?.length > 0 || lineupData[game.homeKey]?.players?.length > 0) && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 7.5, color: C.accent, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Starting Lineups</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[{ key: game.awayKey, abbrev: aA }, { key: game.homeKey, abbrev: hA }].map(({ key, abbrev }) => {
+                  const ld = lineupData[key];
+                  if (!ld?.players?.length) return (
+                    <div key={key} style={{ background: C.bg2, borderRadius: 7, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 8, color: C.textDim, fontWeight: 700, marginBottom: 4 }}>{abbrev}</div>
+                      <div style={{ fontSize: 7.5, color: C.textLo, fontStyle: "italic" }}>Lineup not yet released</div>
+                    </div>
+                  );
+                  return (
+                    <div key={key} style={{ background: C.bg2, borderRadius: 7, padding: "8px 10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 8, color: C.textDim, fontWeight: 700 }}>{abbrev}</span>
+                        <span style={{ fontSize: 7.5, color: ld.confirmed ? C.accentG : C.accentB }}>{ld.confirmed ? "Confirmed" : "Projected"}</span>
+                      </div>
+                      {ld.players.slice(0, 9).map((p, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0",
+                          borderBottom: i < 8 ? `1px solid ${C.borderLo}` : "none" }}>
+                          <span style={{ fontSize: 7.5, color: C.textDim }}>
+                            <span style={{ color: C.textLo2, marginRight: 4 }}>{i + 1}.</span>
+                            {p.name?.split(',').reverse().join(' ').trim() || `#${p.pid}`}
+                          </span>
+                          <span style={{ fontSize: 7.5, fontFamily: "'DM Mono',monospace",
+                            color: p.rating > 1.05 ? C.accentG : p.rating < 0.90 ? C.accentR : C.textDim }}>
+                            {p.xwOBA ? p.xwOBA.toFixed(3) : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div style={{ fontSize: 7.5, color: C.textLo2, lineHeight: 1.7, borderTop: `1px solid ${C.bg3}`, paddingTop: 8 }}>
+            Win% = xR^1.83 Pythagorean · SP factor: ↑=worse (more runs) · Unknown SP default: 0.95<br />
+            Lineup = avg(xwOBA/0.320) of 9 starters · BP from Covers · Fatigue from 3-day pitch counts
           </div>
         </div>
       )}
@@ -1045,8 +1104,10 @@ export default function MLBEdgePro() {
   const [oddsMap, setOddsMap] = useState({});
   const [savant2026, setSavant2026] = useState({});
   const [pitchers2026, setPitchers2026] = useState({});
+  const [livePitchers, setLivePitchers] = useState({});
   const [coversBP, setCoversBP] = useState({});
   const [bpFatigue, setBpFatigue] = useState({});
+  const [lineupData, setLineupData] = useState({});
   const [bets, setBets] = useState([]);
   const [settings, setSettings] = useState({});
   const [oddsStatus, setOddsStatus] = useState("");
@@ -1064,16 +1125,33 @@ export default function MLBEdgePro() {
   const blendedData = useMemo(() => {
     const offense = {}, pitchers = {};
     for (const key of Object.keys(TEAM_OFF_2025)) offense[key] = blendOffenseIndex(key, savant2026);
+    
+    // Pitcher priority: live API data > 2025 hardcoded DB > default 0.95
+    // First, add all hardcoded 2025 pitchers
     for (const name of Object.keys(SP_DB_2025)) pitchers[name] = blendSPFactor(name, pitchers2026);
-    for (const [name, sp] of Object.entries(pitchers2026))
-      if (!pitchers[name]) pitchers[name] = { factor: calcPitcherFactor(sp), pct: 100, label: "2026 only" };
+    // Then override/add with live API pitcher data (real stats for today's starters)
+    for (const [name, sp] of Object.entries(livePitchers)) {
+      if (sp.factor != null) {
+        pitchers[name] = { factor: sp.factor, pct: 0, label: sp.source || "Live API", live: true };
+      }
+    }
+    // Add any remaining from generic 2026 stats API
+    for (const [name, sp] of Object.entries(pitchers2026)) {
+      if (!pitchers[name]) pitchers[name] = { factor: calcPitcherFactor(sp), pct: 100, label: "2026 season stats" };
+    }
+    
     // Merge Covers bullpen factors (override 2025 hardcoded values when available)
     const liveBP = {};
     for (const [key, data] of Object.entries(coversBP)) {
       liveBP[key] = data.factor;
     }
-    return { offense, pitchers, bpFatigue, lineups: {}, liveBP };
-  }, [savant2026, pitchers2026, coversBP, bpFatigue]);
+    // Merge lineup factors from live API
+    const lineups = {};
+    for (const [key, data] of Object.entries(lineupData)) {
+      if (data.confirmed && data.factor !== 1.0) lineups[key] = data.factor;
+    }
+    return { offense, pitchers, bpFatigue, lineups, liveBP };
+  }, [savant2026, pitchers2026, livePitchers, coversBP, bpFatigue, lineupData]);
 
   useEffect(() => {
     const b = memGet("mlb-edge:bets") ?? [];
@@ -1083,8 +1161,10 @@ export default function MLBEdgePro() {
     loadMLB();
     loadSavant();
     loadPitchers();
+    loadLivePitchers();
     loadBullpen();
     loadFatigue();
+    loadLineups();
     refreshRef.current = setInterval(loadMLB, 45000);
     return () => clearInterval(refreshRef.current);
   }, []);
@@ -1109,6 +1189,17 @@ export default function MLBEdgePro() {
     if (Object.keys(data).length > 0) { setPitchers2026(data); setPitcherStatus("live"); }
     else setPitcherStatus("error");
   }
+  async function loadLivePitchers() {
+    try {
+      const res = await fetch('/api/pitchers-live');
+      if (!res.ok) return;
+      const { pitchers } = await res.json();
+      if (pitchers && Object.keys(pitchers).length > 0) {
+        setLivePitchers(pitchers);
+        setPitcherStatus("live");
+      }
+    } catch {}
+  }
   async function loadBullpen() {
     setBpStatus("loading");
     try {
@@ -1130,6 +1221,16 @@ export default function MLBEdgePro() {
           map[key] = data.fatigueFactor ?? 1.0;
         }
         setBpFatigue(map);
+      }
+    } catch {}
+  }
+  async function loadLineups() {
+    try {
+      const res = await fetch('/api/lineups');
+      if (!res.ok) return;
+      const { lineups } = await res.json();
+      if (lineups && Object.keys(lineups).length > 0) {
+        setLineupData(lineups);
       }
     } catch {}
   }
@@ -1204,10 +1305,66 @@ export default function MLBEdgePro() {
         const existing = new Set(prev.map(b => `${b.gameId}-${b.market}`));
         const fresh = newBets.filter(b => !existing.has(`${b.gameId}-${b.market}`));
         if (!fresh.length) return prev;
+        // Write each new bet to Google Sheets
+        fresh.forEach(bet => {
+          fetch('/api/sheets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bet),
+          }).catch(e => console.error('Sheet write failed:', e));
+        });
         const updated = [...fresh, ...prev]; memSet("mlb-edge:bets", updated); return updated;
       });
     }
   }, [oddsMap, games, blendedData]);
+
+  // Load bet history from Google Sheets on startup (persists across sessions)
+  useEffect(() => {
+    async function loadSheetBets() {
+      try {
+        const res = await fetch('/api/sheets');
+        if (!res.ok) return;
+        const { bets: sheetBets } = await res.json();
+        if (!sheetBets || !sheetBets.length) return;
+        // Convert sheet rows to app bet format
+        const converted = sheetBets.map(row => ({
+          id: row.bet_id, date: row.created_at || row.date,
+          game: `${row.away} @ ${row.home}`,
+          gameDate: row.date, market: row.bet_type === 'Side' ? `ML_${row.bet_side?.toUpperCase()}` : row.bet_side?.toUpperCase(),
+          pick: row.pick, odds: +row.opening_odds || 0,
+          openingOdds: +row.opening_odds || 0, closingOdds: row.closing_odds ? +row.closing_odds : null,
+          stake: 1, modelP: row.model_prob ? +row.model_prob : null,
+          edge: row.edge_pct ? +row.edge_pct : null,
+          status: row.status === 'GRADED' ? (row.result === 'W' ? 'won' : row.result === 'L' ? 'lost' : row.result === 'P' ? 'push' : 'pending') : 'pending',
+          payout: row.profit ? +row.profit : null,
+          notes: `${row.away_pitcher_factor || ''} PF${row.park_factor || ''}`,
+          autoLogged: true,
+          snapshot: {
+            awayOff: +row.away_off_index || 0, homeOff: +row.home_off_index || 0,
+            awaySP: +row.away_pitcher_factor || 0, homeSP: +row.home_pitcher_factor || 0,
+            awayBP: +row.away_bullpen_factor || 0, homeBP: +row.home_bullpen_factor || 0,
+            awayBPFat: +row.away_bp_fatigue || 1, homeBPFat: +row.home_bp_fatigue || 1,
+            awayLineup: +row.away_lineup_factor || 1, homeLineup: +row.home_lineup_factor || 1,
+            parkFactor: +row.park_factor || 1, xRA: +row.exp_runs_away || 0, xRH: +row.exp_runs_home || 0,
+            projTotal: +row.projected_total || 0, winProbAway: +row.win_prob_away || 0,
+          },
+        }));
+        setBets(prev => {
+          // Merge: sheet bets are source of truth for graded, keep fresh in-memory for new
+          const sheetIds = new Set(converted.map(b => b.id));
+          const memOnly = prev.filter(b => !sheetIds.has(b.id));
+          return [...memOnly, ...converted];
+        });
+        // Populate autoLogRef so we don't re-flag these
+        converted.forEach(b => {
+          if (b.gameDate && b.market) autoLogRef.current.add(`${b.gameDate}-${b.market}`);
+        });
+      } catch (e) {
+        console.error('Failed to load sheet bets:', e);
+      }
+    }
+    loadSheetBets();
+  }, []);
 
   const today = new Date().toISOString().slice(0, 10);
   const twoDaysOut = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -1362,7 +1519,7 @@ export default function MLBEdgePro() {
                   <div style={{ fontSize: 7.5, color: C.textLo2, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8, marginTop: liveGames.length ? 12 : 0 }}>
                     Today · {todayGames.length} Game{todayGames.length !== 1 ? "s" : ""}
                   </div>
-                  {todayGames.map(g => <GameCard key={g.id} game={g} standings={standings} oddsEntry={getOdds(g)} blendedData={blendedData} />)}
+                  {todayGames.map(g => <GameCard key={g.id} game={g} standings={standings} oddsEntry={getOdds(g)} blendedData={blendedData} lineupData={lineupData} />)}
                 </section>
               : !loading && <div style={{ textAlign: "center", padding: "30px 0", color: C.textLo, fontSize: 10 }}>No games scheduled for today.</div>
             }
@@ -1437,7 +1594,7 @@ export default function MLBEdgePro() {
                     <div style={{ fontSize: 7.5, color: C.textLo2, letterSpacing: 2, textTransform: "uppercase", margin: "10px 0 8px" }}>
                       {new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · {dg.length} game{dg.length !== 1 ? "s" : ""}
                     </div>
-                    {dg.map(g => <GameCard key={g.id} game={g} standings={standings} oddsEntry={getOdds(g)} blendedData={blendedData} />)}
+                    {dg.map(g => <GameCard key={g.id} game={g} standings={standings} oddsEntry={getOdds(g)} blendedData={blendedData} lineupData={lineupData} />)}
                   </section>
                 ));
               })()
